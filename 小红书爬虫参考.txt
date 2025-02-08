@@ -1,0 +1,183 @@
+2.1 爬虫采集模块
+
+首先，定义接口地址作为请求地址：
+
+# 请求地址
+url = 'https://edith.xiaohongshu.com/api/sns/web/v1/feed'
+
+    1
+    2
+
+定义一个请求头，用于伪造浏览器：
+
+# 请求头
+h1 = {
+	'Accept': 'application/json, text/plain, */*',
+	'Accept-Encoding': 'gzip, deflate, br',
+	'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
+	'Content-Type': 'application/json;charset=UTF-8',
+	'Cookie': '换成自己的cookie值',
+	'Origin': 'https://www.xiaohongshu.com',
+	'Referer': 'https://www.xiaohongshu.com/',
+	'Sec-Ch-Ua': '"Microsoft Edge";v="119", "Chromium";v="119", "Not?A_Brand";v="24"',
+	'Sec-Ch-Ua-Mobile': '?0',
+	'Sec-Ch-Ua-Platform': '"macOS"',
+	'Sec-Fetch-Dest': 'empty',
+	'Sec-Fetch-Mode': 'cors',
+	'Sec-Fetch-Site': 'same-site',
+	'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0',
+}
+
+    1
+    2
+    3
+    4
+    5
+    6
+    7
+    8
+    9
+    10
+    11
+    12
+    13
+    14
+    15
+    16
+    17
+
+说明一下，cookie是个关键参数。
+
+其中，cookie里的a1和web_session获取方法，如下：
+
+这两个值非常重要，软件界面需要填写！！
+
+加上请求参数，告诉程序你的爬取条件是什么：
+
+# 请求参数
+post_data = {
+	"source_note_id": note_id,
+	"image_formats": ["jpg", "webp", "avif"],
+	"extra": {"need_body_topic": "1"}
+}
+
+    1
+    2
+    3
+    4
+    5
+    6
+
+下面就是发送请求和接收数据：
+
+# 发送请求
+r = requests.post(url, headers=h1, data=data_json)
+# 接收数据
+json_data = r.json()
+
+    1
+    2
+    3
+    4
+
+逐个解析字段数据，以"笔记标题"为例：
+
+# 笔记标题
+try:
+	title = json_data['data']['items'][0]['note_card']['title']
+except:
+	title = ''
+
+    1
+    2
+    3
+    4
+    5
+
+熟悉xhs的朋友都知道，有些笔记是没有标题的，所以这里加上try保护，防止程序报错导致中断运行。
+
+其他字段同理，不再赘述。
+
+最后，是把数据保存到csv文件：
+
+# 返回数据
+data_row = note_id, title, desc, create_time, update_time, ip_location, like_count, collected_count, comment_count, share_count, nickname, user_id, user_url
+# 保存到csv文件
+with open(self.result_file, 'a+', encoding='utf_8_sig', newline='') as f:
+	writer = csv.writer(f)
+	writer.writerow(data_row)
+
+    1
+    2
+    3
+    4
+    5
+    6
+
+这里采用csv库保存数据，方便每爬取一条笔记数据，快速保存到csv文件中。
+
+完整代码中，还含有：判断循环结束条件、转换时间戳、js逆向解密等关键实现逻辑，详见文末。
+2.2 软件界面模块
+
+主窗口部分：
+
+# 创建主窗口
+root = tk.Tk()
+root.title('小红薯详情采集软件v5.0 | 马哥python说 |')
+# 设置窗口大小
+root.minsize(width=850, height=650)
+
+    1
+    2
+    3
+    4
+    5
+
+输入控件部分：
+
+# a1填写
+tk.Label(root, justify='left', text='a1:').place(x=30, y=80)
+entry_a1 = tk.Text(root, bg='#ffffff', width=96, height=2, )
+entry_a1.place(x=125, y=80, anchor='nw')  # 摆放位置
+# web_session填写
+tk.Label(root, justify='left', text='web_session:').place(x=30, y=120)
+entry_web_session = tk.Text(root, bg='#ffffff', width=96, height=2, )
+entry_web_session.place(x=125, y=120, anchor='nw')  # 摆放位置
+
+    1
+    2
+    3
+    4
+    5
+    6
+    7
+    8
+
+以上。
+2.3 日志模块
+
+好的日志功能，方便软件运行出问题后快速定位原因，修复bug。
+
+核心代码：
+
+def get_logger(self):
+	self.logger = logging.getLogger(__name__)
+	# 日志格式
+	formatter = '[%(asctime)s-%(filename)s][%(funcName)s-%(lineno)d]--%(message)s'
+	# 日志级别
+	self.logger.setLevel(logging.DEBUG)
+	# 控制台日志
+	sh = logging.StreamHandler()
+	log_formatter = logging.Formatter(formatter, datefmt='%Y-%m-%d %H:%M:%S')
+	# info日志文件名
+	info_file_name = time.strftime("%Y-%m-%d") + '.log'
+	# 将其保存到特定目录
+	case_dir = r'./logs/'
+	info_handler = TimedRotatingFileHandler(filename=case_dir + info_file_name,
+										when='MIDNIGHT',
+										interval=1,
+										backupCount=7,
+										encoding='utf-8')
+————————————————
+
+你可以参考上述代码做一次完善，

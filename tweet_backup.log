@@ -1,0 +1,9 @@
+2025-02-07 18:27:44,792 - error_code=invalid_request_error error_message='completions api is only available when using beta api (set base_url="https://api.deepseek.com/beta")' error_param=None error_type=invalid_request_error message='OpenAI API error received' stream_error=False
+2025-02-07 18:30:43,903 - 原始推文: 截至我知识更新的时间点（2023年10月），我无法实时查询或提供埃隆·马斯克（Elon Musk）的最新推文。要获取马斯克最近的三条推文，您可以访问他的Twitter个人主页（[https://twitter.com/elonmusk](https://twitter.com/elonmusk)），查看他发布的最新内容，并手动筛选出非转发的原创推文。
+
+如果您需要实时信息，请开启联网搜索功能以获取最新数据。
+翻译后的推文: 截至我的知识更新时间（2023年10月），我无法实时查询或提供埃隆·马斯克的最新推文。要获取马斯克最近的三条原创推文，请直接访问他的Twitter个人主页（[https://twitter.com/elonmusk](https://twitter.com/elonmusk)），浏览其最新发布内容并手动筛选出非转发的原创推文。
+
+如需获取实时信息，建议启用联网搜索功能以获取最新数据。
+
+2025-02-07 18:41:44,527 - Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /beta/chat/completions
