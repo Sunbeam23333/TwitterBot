@@ -17,19 +17,34 @@ FEISHU_API_URL = "https://open.feishu.cn/open-apis"
 TARGET_CHAT_ID = "oc_652900f809bc482b3e5e1ad5dab046dd"  # 目标群聊 ID
 
 # ===== Twitter API V2 配置 =====
-BEARER_TOKEN = 'AAAAAAAAAAAAAAAAAAAAAM41ywEAAAAAAvWrLb8Bl7FdoVPl9FnF34S3QxI%3DrDeieu40fY1JP51BQNxGELwxygrWeVjds1LuhJOmnexvVLzU9n'
+BEARER_TOKEN = 'YOUR_TWITTER_BEARER_TOKEN'
 client = tweepy.Client(bearer_token=BEARER_TOKEN)
 
 # ===== DeepSeek API 配置 =====
-DEEPSEEK_API_KEY = 'sk-ffef30431d49412690e9ce91192b5cb8'
+DEEPSEEK_API_KEY = 'YOUR_DEEPSEEK_API_KEY'
 openai.api_key = DEEPSEEK_API_KEY
 openai.api_base = 'https://api.deepseek.com/beta'
 
 # ===== 日志配置 =====
 logging.basicConfig(filename="tweet_monitor.log", level=logging.INFO, format='%(asctime)s - %(message)s')
 
-# 记录已获取的推文，避免重复处理
-seen_tweets = set()
+# 记录已获取的推文，避免重复处理（持久化存储）
+SEEN_TWEETS_FILE = "seen_tweets.json"
+
+def load_seen_tweets():
+    """ 读取已记录的推文 ID """
+    try:
+        with open(SEEN_TWEETS_FILE, "r") as f:
+            return set(json.load(f))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return set()
+
+def save_seen_tweets(seen_tweets):
+    """ 保存已记录的推文 ID """
+    with open(SEEN_TWEETS_FILE, "w") as f:
+        json.dump(list(seen_tweets), f)
+
+seen_tweets = load_seen_tweets()
 
 # ===== 飞书 API 相关函数 =====
 
@@ -51,15 +66,27 @@ def send_feishu_message(tenant_access_token, chat_id, content):
         "Authorization": f"Bearer {tenant_access_token}",
         "Content-Type": "application/json; charset=utf-8"
     }
-    payload = {"chat_id": chat_id, "msg_type": "text", "content": json.dumps({"text": content})}
+    
+    # 确保内容不会超出 Feishu 限制（2000 字符）
+    if len(content) > 2000:
+        content = content[:2000] + "..."
+
+    payload = {
+        "chat_id": chat_id,
+        "msg_type": "text",
+        "content": {"text": content}  # 确保 Feishu API 解析正确
+    }
     
     for _ in range(3):  # 失败重试 3 次
         response = requests.post(url, headers=headers, json=payload)
-        if response.status_code == 200 and response.json().get('code') == 0:
-            print("消息发送成功")
+        result = response.json()
+        
+        if response.status_code == 200 and result.get('code') == 0:
+            print("✅ 消息发送成功")
             return
-        time.sleep(2)
-    print(f"消息发送失败: {response.text}")
+        
+        print(f"⚠️ 消息发送失败: {result}")
+        time.sleep(2)  # 重试前等待 2 秒
 
 # ===== 推文获取与日志记录 =====
 
@@ -70,32 +97,32 @@ def fetch_and_log_tweets():
         response = client.search_recent_tweets(query=query, max_results=10)
 
         if response.data:
-            with open("tweet_monitor.log", "a", encoding="utf-8") as log_file:
+            with open("tweet_monitor.log", "a", encoding="utf-8-sig", errors="replace") as log_file:
                 for tweet in response.data:
-                    tweet_id = tweet.id
+                    tweet_id = str(tweet.id)
                     if tweet_id in seen_tweets:
                         continue  # 避免重复记录相同推文
                     seen_tweets.add(tweet_id)
 
                     tweet_url = f"https://twitter.com/{tweet.author_id}/status/{tweet_id}"
                     tweet_text = tweet.text.replace("\n", " ")  # 去除换行符
+                    tweet_text = tweet_text.encode('utf-8', 'ignore').decode('utf-8')  # 处理编码问题
+
                     log_entry = f"📄 内容: {tweet_text}\n🔗 链接: {tweet_url}\n"
                     log_file.write(log_entry)
                     logging.info(log_entry)
-            print("推文已记录到日志。")
+            
+            save_seen_tweets(seen_tweets)  # 记录已处理的推文，防止重复
+            print("✅ 推文已记录到日志")
         else:
-            print("未获取到新的推文。")
+            print("⚠️ 未获取到新的推文")
     except tweepy.TweepyException as e:
-        print(f"获取推文失败: {e}")
+        print(f"❌ 获取推文失败: {e}")
 
 def read_latest_tweets_from_log(log_file='tweet_monitor.log', num_tweets=10):
     """ 从日志文件读取最新的 10 条推文 """
     try:
-        with open(log_file, 'rb') as f:
-            raw_data = f.read(10000)
-            file_encoding = chardet.detect(raw_data)['encoding'] or 'utf-8'
-
-        with open(log_file, 'r', encoding=file_encoding) as f:
+        with open(log_file, 'r', encoding="utf-8-sig", errors="replace") as f:
             lines = f.readlines()
 
         tweets = []
@@ -111,9 +138,10 @@ def read_latest_tweets_from_log(log_file='tweet_monitor.log', num_tweets=10):
                 temp_tweet = None
                 temp_url = None
 
+        print(f"✅ 成功提取推文 {len(tweets)} 条")
         return tweets[-num_tweets:]  # 返回最近的 num_tweets 条
     except Exception as e:
-        print(f"读取日志文件失败: {e}")
+        print(f"❌ 读取日志文件失败: {e}")
         return []
 
 # ===== 翻译推文 =====
@@ -146,14 +174,13 @@ def process_tweets_from_log():
 
     for tweet_text, tweet_url in selected_tweets:
         translated_text = translate_tweet(tweet_text)
-        message = f"🦅 马斯克最近的推文:\n\n{tweet_text}\n\n翻译:\n{translated_text}\n\n🔗 {tweet_url}"
+        message = f"🦅 马斯克最新推文:\n\n{tweet_text}\n\n翻译:\n{translated_text}\n\n🔗 {tweet_url}"
         send_feishu_message(tenant_access_token, TARGET_CHAT_ID, message)
 
 # ===== 定时任务 =====
-CHECK_INTERVAL = 180  # 改为 180 分钟（3 小时）
 scheduler = schedule.Scheduler()
-scheduler.every(CHECK_INTERVAL).minutes.do(fetch_and_log_tweets)
-scheduler.every(CHECK_INTERVAL).minutes.do(process_tweets_from_log)
+scheduler.every(180).minutes.do(fetch_and_log_tweets)
+scheduler.every(180).minutes.do(process_tweets_from_log)
 
 while True:
     scheduler.run_pending()
